@@ -1,4 +1,46 @@
 # Accepted and proposed project metadata.
-# Keep this list empty until there are actual proposals to record.
 version: 1
-projects: []
+projects:
+  - id: count-to-ten
+    title: Count to Ten
+    status: review
+    summary: >-
+      A tap-to-count toy for a toddler. Each tap shows the next number from one
+      to ten as a numeral, a word, one more ten-frame counter, and a color, while
+      the number word is said aloud; ten ends in a celebration and the count
+      restarts at one.
+    target_nodes:
+      - counting.sequence.recite
+      - counting.successor
+      - numeral.match-quantity
+    audience: A toddler (17 months at build time) playing with a parent
+    learning_objectives:
+      - "Joins the count: babbles, repeats, or attempts a number word with the adult or the app"
+      - Anticipates ten by watching the ten-frame fill and looking for the celebration before the tenth tap
+    interaction_rationale: >-
+      The child's own tap paces the sequence, and each tap produces exactly one
+      more counter and the next word at the same moment, through sight, sound,
+      and touch. A picture book shows the pairing but cannot let a one-year-old
+      drive it one step at a time.
+    misconceptions:
+      - "Expected at this age, not an error: number words heard as one rote string"
+      - "Risk for the adult, not the child: reading the app as teaching how many"
+    assessment:
+      - Observe during co-play whether she attempts any number word
+      - Observe whether she anticipates the celebration before the tenth tap
+      - "Transfer: later, whether she counts aloud away from the screen (stairs, toys)"
+    evidence:
+      - "Exact meaning of 'one' typically arrives around 2.5 years and the cardinal principle around 3.5 to 4 (Wynn 1990; Sarnecka and Carey 2008), so the target is exposure and routine, not mastery"
+      - "AAP guidance favors minimal screen media before 18 months and adult co-use from 18 to 24 months; the app is short, tap-driven, and made for co-play"
+    scope:
+      included:
+        - Counting one to ten by tapping, with numeral, word, ten-frame, color, voice, chime, and vibration
+        - Celebration at ten and restart at one
+        - Optional parent voice recordings
+      excluded:
+        - Counting backward, beyond ten, or skipping
+        - In-app questions, scores, levels, or streaks
+        - Accounts, data collection, analytics, and autoplay
+    app_path: apps/count-to-ten/index.html
+    app_url: null
+    owner: Daniel Ketterer

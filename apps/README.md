@@ -1,6 +1,10 @@
 # Standalone apps
 
-No apps are included yet. This directory is reserved for approved projects.
+This directory is reserved for approved projects.
+
+| App | Status |
+|---|---|
+| [count-to-ten](count-to-ten/) | review |
 
 ## Directory convention
 

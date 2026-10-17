@@ -1,2 +1,4 @@
 jsonschema>=4.21,<5
 PyYAML>=6.0,<7
+# Lets jsonschema check the "uri" format used by app_url
+rfc3986-validator>=0.1.1,<0.2

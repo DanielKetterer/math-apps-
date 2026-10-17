@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<!--
+  Count to Ten (for Alexandra)
+  ---------------------------------------------------------------
+  Tap anywhere. Each tap counts one more: the numeral, its word, and one
+  more counter in the ten-frame, each number in its own color, said out
+  loud. At ten: a celebration with ten balloons. The next tap starts over
+  at one.
+
+  Every number arrives four ways at once:
+    see    - the numeral (3), the word (three), and three counters
+    hear   - the number word, plus a soft chime that climbs a scale
+             (one is the lowest note, ten the highest)
+    touch  - the tap itself; on phones that support it, 3 little buzzes for 3
+    order  - the counters fill a ten-frame (two rows of five), so each tap
+             visibly adds exactly one and the empty boxes show how far to ten
+
+  VOICE (works with no files at all):
+    With no recordings, the browser's built-in voice says the numbers.
+    To use your own voice, put recordings in the "sounds" folder next to
+    this file, either as
+      a) ten files:  sounds/1.m4a, sounds/2.m4a ... sounds/10.m4a  (or .mp3)
+      b) one file:   sounds/count.m4a  (or .mp3) - you counting
+                     "one ... two ... three ... ten" with about a second
+                     of quiet between numbers. The app finds the ten words.
+    Ten files win if both exist. Any number that is missing or fails to
+    load falls back to the built-in voice. No code change needed.
+    Recordings only load when the page is served (GitHub Pages or a local
+    server), not when the file is opened straight from disk. Until
+    recordings exist, the browser console shows a few 404s for the
+    optional files; that is expected.
+
+  Link: https://DanielKetterer.github.io/math-apps-/apps/count-to-ten/
+  ---------------------------------------------------------------
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0b0f">
+<meta name="description" content="Tap to count from one to ten: numeral, word, counters, and voice together, with a celebration at ten.">
+<title>Count to Ten</title>
+<style>
+  :root {
+    --num:  min(44vw, 27vh, 300px);        /* numeral size */
+    --cell: min(16vw, 10.5vh, 104px);      /* one ten-frame box */
+  }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #0b0b0f;
+    font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3.5vh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing: border-box;
+    color: #4a4a5e;                         /* the glow follows this color */
+    transition: color 0.45s ease;
+    cursor: pointer;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  #stage:focus-visible { box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.55); }
+
+  #glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 36%, currentColor 0%, transparent 60%);
+    opacity: 0.24;
+    transition: opacity 0.45s ease;
+  }
+
+  #top {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  #numeral {
+    font-size: var(--num);
+    font-weight: 900;
+    line-height: 1;
+    min-height: 1em;
+    min-width: 1.2em;
+    text-align: center;
+    color: #fff;
+    text-shadow: 0 0 0.16em currentColor, 0 0.04em 0.08em rgba(0, 0, 0, 0.45);
+    will-change: transform;
+  }
+  #numeral.pop { animation: pop 0.42s cubic-bezier(.2, .9, .3, 1.25); }
+  @keyframes pop {
+    0%   { transform: scale(0.55); }
+    65%  { transform: scale(1.12); }
+    100% { transform: scale(1); }
+  }
+
+  #word {
+    font-size: calc(var(--num) * 0.2);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    min-height: 1.2em;
+    line-height: 1.2;
+  }
+
+  #hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    font-size: calc(var(--num) * 0.42);
+    line-height: 1;
+    transform: translate(-50%, -75%);
+    animation: beckon 1.6s ease-in-out infinite;
+  }
+  #hint[hidden] { display: none; }
+  @keyframes beckon {
+    0%, 100% { transform: translate(-50%, -75%) scale(1); }
+    50%      { transform: translate(-50%, -82%) scale(1.12); }
+  }
+
+  /* The ten-frame: two rows of five boxes. Fills the top row first, like a real one. */
+  #frame {
+    display: grid;
+    grid-template-columns: repeat(5, var(--cell));
+    grid-template-rows: repeat(2, var(--cell));
+    border: max(3px, calc(var(--cell) * 0.05)) solid rgba(255, 255, 255, 0.32);
+    border-radius: calc(var(--cell) * 0.2);
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    pointer-events: none;
+    position: relative;
+  }
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: max(2px, calc(var(--cell) * 0.035)) solid rgba(255, 255, 255, 0.2);
+    border-bottom: max(2px, calc(var(--cell) * 0.035)) solid rgba(255, 255, 255, 0.2);
+  }
+  .cell:nth-child(5n)   { border-right: none; }
+  .cell:nth-child(n+6)  { border-bottom: none; }
+
+  .dot {
+    width: 76%;
+    height: 76%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.6) 0 11%, rgba(255, 255, 255, 0) 13%),
+      radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 58%, rgba(0, 0, 0, 0.18) 100%),
+      var(--dc);
+    transform: scale(0);
+    opacity: 0;
+    transition: transform 0.22s ease-in, opacity 0.22s ease-in;
+  }
+  .dot.on  { transform: scale(1); opacity: 1; transition: none; }
+  .dot.new { animation: drop 0.46s cubic-bezier(.2, .9, .3, 1.3); }
+  @keyframes drop {
+    0%   { transform: scale(0); }
+    60%  { transform: scale(1.24); }
+    100% { transform: scale(1); }
+  }
+
+  /* ---------- The ten celebration ---------- */
+  body.party #stage   { animation: rainbow 1.6s linear infinite; }
+  body.party #glow    { opacity: 0.42; }
+  body.party #numeral { animation: rainbow 1.6s linear infinite, cheer 0.8s ease-in-out infinite; }
+  body.party .dot.on  { animation: hop 0.55s ease-in-out calc(var(--i) * 70ms) 2 both; }
+  @keyframes rainbow {
+    0%   { color: #FF4D4D; }  10% { color: #FF9A1F; }  20% { color: #FFD60A; }
+    30%  { color: #9BE15D; }  40% { color: #2ECC71; }  50% { color: #1FC8C8; }
+    60%  { color: #3DA5FF; }  70% { color: #6C63FF; }  80% { color: #B25CFF; }
+    90%  { color: #FF4FA3; } 100% { color: #FF4D4D; }
+  }
+  @keyframes cheer {
+    0%, 100% { transform: scale(1) rotate(0deg); }
+    25%      { transform: scale(1.14) rotate(-4deg); }
+    75%      { transform: scale(1.14) rotate(4deg); }
+  }
+  @keyframes hop {
+    0%, 100% { transform: translateY(0) scale(1); }
+    45%      { transform: translateY(-22%) scale(1.14); }
+  }
+
+  #fx {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* Phones held sideways: numeral on the left, ten-frame on the right */
+  @media (orientation: landscape) and (max-height: 560px) {
+    :root {
+      --num:  min(30vw, 52vh);
+      --cell: min(9vw, 26vh, 104px);
+    }
+    #stage { flex-direction: row; gap: 6vw; }
+    #glow  { background: radial-gradient(circle at 32% 50%, currentColor 0%, transparent 55%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #numeral.pop, .dot.new, #hint { animation: none; }
+    #hint { transform: translate(-50%, -75%); }
+    body.party #numeral { animation: rainbow 1.6s linear infinite; }
+    body.party .dot.on  { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage" role="button" tabindex="0" aria-label="Count to ten. Tap, or press Space, to count one more.">
+  <div id="glow"></div>
+  <div id="top" aria-hidden="true">
+    <div id="numeral">&nbsp;</div>
+    <div id="word">&nbsp;</div>
+    <div id="hint">👆</div>
+  </div>
+  <div id="frame" aria-hidden="true"></div>
+</div>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   The numbers. One color per number, rainbow order, one to ten.
+   ===================================================================== */
+var MAX = 10;
+var COLORS = [null,
+  "#FF4D4D",  // 1 red
+  "#FF9A1F",  // 2 orange
+  "#FFD60A",  // 3 yellow
+  "#9BE15D",  // 4 lime
+  "#2ECC71",  // 5 green
+  "#1FC8C8",  // 6 teal
+  "#3DA5FF",  // 7 sky blue
+  "#6C63FF",  // 8 indigo
+  "#B25CFF",  // 9 purple
+  "#FF4FA3"   // 10 pink
+];
+var WORDS = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+/* Chime notes climb a C major scale, C5 up to E6 (MIDI numbers). */
+var CHIME = [0, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88];
+
+/* Taps closer together than this only ripple, so each word gets heard. */
+var TAP_GAP_MS = 380;
+
+var REDUCED = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+/* =====================================================================
+   Page pieces
+   ===================================================================== */
+var stage   = document.getElementById("stage");
+var numeral = document.getElementById("numeral");
+var word    = document.getElementById("word");
+var hint    = document.getElementById("hint");
+var frame   = document.getElementById("frame");
+var live    = document.getElementById("live");
+var canvas  = document.getElementById("fx");
+var g2      = canvas.getContext("2d");
+
+var dots = [];
+for (var i = 1; i <= MAX; i++) {
+  var cell = document.createElement("div");
+  cell.className = "cell";
+  var d = document.createElement("div");
+  d.className = "dot";
+  d.style.setProperty("--dc", COLORS[i]);
+  d.style.setProperty("--i", String(i - 1));
+  cell.appendChild(d);
+  frame.appendChild(cell);
+  dots.push(d);
+}
+
+function restartAnim(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;          // lets the same animation replay on repeat taps
+  el.classList.add(cls);
+}
+
+/* =====================================================================
+   Audio: one context, created inside the first tap (a user gesture)
+   ===================================================================== */
+var actx = null, out = null, noiseBuf = null;
+function ctx() {
+  if (!actx) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { return null; }
+    actx = new AC();
+    var comp = actx.createDynamicsCompressor();      // keeps stacked notes from clipping
+    comp.threshold.value = -12;
+    comp.ratio.value = 3;
+    comp.connect(actx.destination);
+    out = actx.createGain();
+    out.gain.value = 0.9;
+    out.connect(comp);
+    var len = Math.floor(actx.sampleRate * 0.3);
+    noiseBuf = actx.createBuffer(1, len, actx.sampleRate);
+    var nd = noiseBuf.getChannelData(0);
+    for (var k = 0; k < len; k++) { nd[k] = Math.random() * 2 - 1; }
+    decodeRecordings();
+  }
+  if (actx.state === "suspended") { actx.resume(); }
+  return actx;
+}
+
+function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+/* Percussive tone: quick attack, exponential fade */
+function tone(freq, t, dur, gain, type) {
+  var o = actx.createOscillator();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(freq, t);
+  var g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(out);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+
+/* Soft marimba plink for each number */
+function chime(n, t) {
+  var f = mtof(CHIME[n]);
+  tone(f, t, 0.5, 0.1, "sine");
+  tone(f * 4, t, 0.06, 0.02, "sine");               // mallet tick
+}
+
+/* The ten fanfare: a run up, a held "ta-da" chord, then twinkles */
+function fanfare(t) {
+  var run = [72, 76, 79, 84, 88, 91];                 // C5 E5 G5 C6 E6 G6
+  run.forEach(function (m, k) { tone(mtof(m), t + k * 0.075, 0.35, 0.15, "triangle"); });
+  var t2 = t + run.length * 0.075 + 0.04;
+  [72, 76, 79, 84].forEach(function (m) {
+    tone(mtof(m), t2, 1.7, 0.1, "triangle");
+    tone(mtof(m) * 2, t2, 0.9, 0.025, "sine");
+  });
+  var twinkle = [84, 86, 88, 91, 93, 96];             // C major pentatonic, high
+  for (var k = 0; k < 14; k++) {
+    var m = twinkle[Math.floor(Math.random() * twinkle.length)];
+    tone(mtof(m), t2 + 0.15 + k * 0.11 + Math.random() * 0.04, 0.45, 0.045, "sine");
+  }
+}
+
+/* Balloon pop: a short noise burst with a falling blip */
+function popSound(t) {
+  var s = actx.createBufferSource(); s.buffer = noiseBuf;
+  var f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 1900; f.Q.value = 0.8;
+  var g = actx.createGain();
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  s.connect(f); f.connect(g); g.connect(out);
+  s.start(t); s.stop(t + 0.12);
+  var o = actx.createOscillator();
+  o.frequency.setValueAtTime(700, t);
+  o.frequency.exponentialRampToValueAtTime(160, t + 0.09);
+  var og = actx.createGain();
+  og.gain.setValueAtTime(0.18, t);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o.connect(og); og.connect(out);
+  o.start(t); o.stop(t + 0.12);
+}
+
+/* Little rising bloop for taps that miss a balloon */
+function bloop(t) {
+  var o = actx.createOscillator();
+  o.type = "sine";
+  o.frequency.setValueAtTime(520, t);
+  o.frequency.exponentialRampToValueAtTime(1150, t + 0.12);
+  var g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.09, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  o.connect(g); g.connect(out);
+  o.start(t); o.stop(t + 0.2);
+}
+
+/* =====================================================================
+   Built-in voice (speechSynthesis), used when there is no recording
+   ===================================================================== */
+var synth = ("speechSynthesis" in window) ? window.speechSynthesis : null;
+var ttsVoice = null;
+
+function pickVoice() {
+  if (!synth) { return; }
+  var best = null, bestScore = -1;
+  (synth.getVoices() || []).forEach(function (v) {
+    if (!/^en([-_]|$)/i.test(v.lang)) { return; }
+    var s = 0;
+    if (v.localService) { s += 4; }                  // works offline, starts faster
+    if (/^en[-_]US/i.test(v.lang)) { s += 2; }
+    if (/samantha|ava|allison|aria|jenny|karen|moira|tessa|zira|female/i.test(v.name)) { s += 1; }
+    if (v.default) { s += 1; }
+    if (s > bestScore) { bestScore = s; best = v; }
+  });
+  ttsVoice = best;
+}
+if (synth) {
+  pickVoice();
+  if (synth.addEventListener) { synth.addEventListener("voiceschanged", pickVoice); }
+}
+
+function say(text) {
+  if (!synth || typeof SpeechSynthesisUtterance === "undefined") { return false; }
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = ttsVoice ? ttsVoice.lang : "en-US";
+  if (ttsVoice) { u.voice = ttsVoice; }
+  u.rate = 0.8;            // a little slower than normal speech
+  u.pitch = 1.15;          // a little warmer and higher
+  u.volume = 1;
+  try {
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+      setTimeout(function () { synth.speak(u); }, 30);   // some browsers drop a speak() right after cancel()
+    } else {
+      synth.speak(u);
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+/* =====================================================================
+   Recordings: sounds/1.m4a ... sounds/10.m4a, or one sounds/count.m4a
+   Fetched as soon as the page loads; decoded after the first tap.
+   ===================================================================== */
+var EXTS = ["m4a", "mp3"];
+var recMode = "loading";       // "loading" | "none" | "ten" | "one"
+var rawTen = {};               // n -> ArrayBuffer, until decoded
+var rawCount = null;           // ArrayBuffer of the one-take recording, until decoded
+var clips = {};                // n -> { buffer, offset, dur, gain }
+var clipWait = {};             // n -> Promise of a clip or null
+var clipDone = {};             // n -> true once that promise has settled
+var countWait = null;
+
+function track(n, promise) {
+  clipWait[n] = promise.then(function (c) { clipDone[n] = true; return c; });
+}
+
+function fetchBuf(url) {
+  return fetch(url, { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.arrayBuffer(); })
+    .then(function (b) { return { url: url, buf: b }; })
+    .catch(function () { return null; });
+}
+function firstInOrder(urls) {                         // try one at a time, stop at the first hit
+  return urls.reduce(function (p, url) {
+    return p.then(function (hit) { return hit || fetchBuf(url); });
+  }, Promise.resolve(null));
+}
+function firstAtOnce(urls) {                          // try all at once, keep the first in list order
+  return Promise.all(urls.map(fetchBuf)).then(function (hits) {
+    for (var k = 0; k < hits.length; k++) { if (hits[k]) { return hits[k]; } }
+    return null;
+  });
+}
+function soundUrls(name, exts) {
+  return exts.map(function (e) { return "sounds/" + name + "." + e; });
+}
+
+function loadRecordings() {
+  if (!window.fetch || !window.Promise || location.protocol === "file:") { recMode = "none"; return; }
+  Promise.all([firstAtOnce(soundUrls("1", EXTS)), firstAtOnce(soundUrls("count", EXTS))])
+    .then(function (found) {
+      var one = found[0], whole = found[1];
+      if (one) {
+        recMode = "ten";
+        rawTen[1] = one.buf;
+        var ext = one.url.split(".").pop();
+        var order = [ext].concat(EXTS.filter(function (e) { return e !== ext; }));
+        var jobs = [];
+        for (var n = 2; n <= MAX; n++) {
+          jobs.push((function (n) {
+            return firstInOrder(soundUrls(String(n), order)).then(function (hit) {
+              if (hit) { rawTen[n] = hit.buf; }
+            });
+          })(n));
+        }
+        return Promise.all(jobs);
+      }
+      if (whole) { recMode = "one"; rawCount = whole.buf; return; }
+      recMode = "none";
+    })
+    .then(function () { if (actx) { decodeRecordings(); } })
+    .catch(function () { recMode = "none"; });
+}
+
+function decodeAudio(buf) {
+  return new Promise(function (resolve) {
+    try {
+      var p = actx.decodeAudioData(buf, resolve, function () { resolve(null); });
+      if (p && p.then) { p.then(resolve, function () { resolve(null); }); }
+    } catch (e) { resolve(null); }
+  });
+}
+
+function mono(buffer) {
+  var len = buffer.length, ch = buffer.numberOfChannels;
+  var m = new Float32Array(len);
+  for (var c = 0; c < ch; c++) {
+    var d = buffer.getChannelData(c);
+    for (var k = 0; k < len; k++) { m[k] += d[k] / ch; }
+  }
+  return m;
+}
+
+/* Loudness match: scale each word so its peak sits near the same level */
+function levelFor(data, from, to) {
+  var peak = 0;
+  for (var k = from; k < to; k++) { var a = Math.abs(data[k]); if (a > peak) { peak = a; } }
+  return peak > 0.001 ? Math.min(6, 0.8 / peak) : 1;
+}
+
+function decodeRecordings() {
+  if (!actx) { return; }
+  if (recMode === "ten") {
+    for (var n = 1; n <= MAX; n++) {
+      if (rawTen[n] && !clipWait[n]) {
+        track(n, (function (n, buf) {
+          return decodeAudio(buf).then(function (b) {
+            if (!b) { return null; }
+            var m = mono(b);
+            clips[n] = { buffer: b, offset: 0, dur: b.duration, gain: levelFor(m, 0, m.length) };
+            return clips[n];
+          });
+        })(n, rawTen[n]));
+        rawTen[n] = null;
+      }
+    }
+  } else if (recMode === "one" && rawCount && !countWait) {
+    countWait = decodeAudio(rawCount).then(function (b) {
+      if (!b) { return; }
+      var m = mono(b);
+      var words = findWords(m, b.sampleRate, MAX);
+      if (!words) {
+        console.warn("count-to-ten: could not find ten separate words in the count recording; using the built-in voice. Try leaving about a second of quiet between numbers.");
+        return;
+      }
+      words.forEach(function (w, k) {
+        clips[k + 1] = {
+          buffer: b, offset: w[0], dur: w[1] - w[0],
+          gain: levelFor(m, Math.floor(w[0] * b.sampleRate), Math.floor(w[1] * b.sampleRate))
+        };
+      });
+    });
+    for (var j = 1; j <= MAX; j++) {
+      track(j, (function (j) {
+        return countWait.then(function () { return clips[j] || null; });
+      })(j));
+    }
+    rawCount = null;
+  }
+}
+
+/* Find `want` spoken words in one recording, split by the quiet between them.
+   Returns [[startSec, endSec], ...] in order, or null if it can't find exactly that many.
+   Works on 10 ms loudness frames: tries a range of loudness thresholds and keeps
+   the middle of the range that yields exactly `want` words (the most stable
+   split), then widens each word to catch soft edges like the "s" in "six". */
+function findWords(data, rate, want) {
+  var hop = Math.max(1, Math.round(rate * 0.01));
+  var nf = Math.floor(data.length / hop);
+  if (nf < want * 12) { return null; }
+  var e = new Float32Array(nf), peak = 0, k, j;
+  for (k = 0; k < nf; k++) {
+    var s = 0, base = k * hop;
+    for (j = 0; j < hop; j++) { var v = data[base + j]; s += v * v; }
+    e[k] = Math.sqrt(s / hop);
+    if (e[k] > peak) { peak = e[k]; }
+  }
+  if (peak < 1e-4) { return null; }
+  var sorted = Array.prototype.slice.call(e).sort(function (a, b) { return a - b; });
+  var floor = sorted[Math.floor(nf * 0.1)];
+
+  var GAPS = [22, 15, 32];        // frames of quiet that separate words (220, 150, 320 ms)
+  var MINLEN = 8;                 // anything shorter than 80 ms is a click, not a word
+  var segs = null;
+  for (var gi = 0; gi < GAPS.length && !segs; gi++) {
+    var hits = [];
+    for (var step = 0; step < 60; step++) {
+      var frac = 0.012 * Math.pow(1.07, step);
+      if (frac > 0.7) { break; }
+      var found = loudRuns(e, floor + (peak - floor) * frac, GAPS[gi], MINLEN);
+      if (found.length === want) { hits.push(found); }
+    }
+    if (hits.length) { segs = hits[Math.floor(hits.length / 2)]; }
+  }
+  if (!segs) { return null; }
+
+  var soft = Math.max(floor * 2.5, peak * 0.008);
+  var fs = hop / rate;
+  return segs.map(function (r, idx) {
+    var lo = idx ? Math.ceil((segs[idx - 1][1] + r[0]) / 2) : 0;
+    var hi = idx < segs.length - 1 ? Math.floor((r[1] + segs[idx + 1][0]) / 2) : nf - 1;
+    var a = r[0], b = r[1];
+    while (a - 1 >= lo && e[a - 1] > soft) { a--; }
+    while (b + 1 <= hi && e[b + 1] > soft) { b++; }
+    var start = Math.max(lo * fs, a * fs - 0.08);
+    var end = Math.min((hi + 1) * fs, (b + 1) * fs + 0.1);
+    return [start, end];
+  });
+}
+
+function loudRuns(e, thr, gap, minLen) {
+  var runs = [], st = -1, k;
+  for (k = 0; k < e.length; k++) {
+    if (e[k] > thr) { if (st < 0) { st = k; } }
+    else if (st >= 0) { runs.push([st, k - 1]); st = -1; }
+  }
+  if (st >= 0) { runs.push([st, e.length - 1]); }
+  var merged = [];
+  runs.forEach(function (r) {
+    var last = merged[merged.length - 1];
+    if (last && r[0] - last[1] - 1 < gap) { last[1] = r[1]; }
+    else { merged.push([r[0], r[1]]); }
+  });
+  return merged.filter(function (r) { return r[1] - r[0] + 1 >= minLen; });
+}
+
+var voiceNow = null;
+function playClip(c) {
+  var t = actx.currentTime + 0.01;
+  var s = actx.createBufferSource();
+  s.buffer = c.buffer;
+  var g = actx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(c.gain, t + 0.012);
+  g.gain.setValueAtTime(c.gain, t + Math.max(0.012, c.dur - 0.04));
+  g.gain.linearRampToValueAtTime(0, t + c.dur);
+  s.connect(g); g.connect(out);
+  s.start(t, c.offset, c.dur);
+  voiceNow = { s: s, g: g };
+  return c.dur;
+}
+function stopClip() {
+  if (!voiceNow || !actx) { return; }
+  var t = actx.currentTime;
+  try {
+    voiceNow.g.gain.cancelScheduledValues(t);
+    voiceNow.g.gain.setTargetAtTime(0, t, 0.015);
+    voiceNow.s.stop(t + 0.08);
+  } catch (e) {}
+  voiceNow = null;
+}
+
+/* Say number n. Returns about how long the word takes, in seconds. */
+function speakNumber(n) {
+  stopClip();
+  if (actx && clips[n]) { return playClip(clips[n]); }
+  if (actx && clipWait[n] && !clipDone[n]) {
+    // A recording exists but is still decoding (only ever the first tap or two)
+    clipWait[n].then(function (c) {
+      if (count !== n) { return; }
+      if (c) { playClip(c); } else { say(WORDS[n]); }
+    });
+    return 0.9;
+  }
+  say(n === MAX ? "ten!" : WORDS[n]);
+  return n === MAX ? 0.85 : 0.6;
+}
+
+/* =====================================================================
+   Effects canvas: tap ripples, confetti, and the ten balloons
+   ===================================================================== */
+var W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  g2.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+var parts = [];       // ripples and confetti
+var balloons = [];
+var running = false, lastFrame = 0;
+
+function kick() {
+  if (running || REDUCED) { return; }
+  running = true;
+  lastFrame = performance.now();
+  requestAnimationFrame(frameLoop);
+}
+
+function ripple(x, y, color) {
+  if (REDUCED) { return; }
+  parts.push({ kind: "ring", x: x, y: y, color: color, age: 0, life: 0.45 });
+  kick();
+}
+
+function confetti(x, y, count, colors, power) {
+  if (REDUCED) { return; }
+  for (var k = 0; k < count; k++) {
+    var ang = Math.random() * Math.PI * 2;
+    var sp = (0.35 + Math.random() * 0.65) * power;
+    parts.push({
+      kind: Math.random() < 0.3 ? "dot" : "bit",
+      x: x, y: y,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - power * 0.35,
+      rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 14,
+      size: 6 + Math.random() * 7,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      age: 0, life: 1.6 + Math.random() * 1.1
+    });
+  }
+  kick();
+}
+
+function launchBalloons() {
+  var r = Math.max(20, Math.min(56, (W / MAX) * 0.62, H * 0.075));
+  for (var n = 1; n <= MAX; n++) {
+    var x = r * 1.1 + (n - 1) * (W - r * 2.2) / (MAX - 1) + (Math.random() - 0.5) * r * 0.3;
+    balloons.push({
+      n: n, color: COLORS[n], r: r,
+      x0: x, x: x,
+      y: H + r * 1.4 + (n % 2 ? 0 : r * 1.3) + (n - 1) * r * 0.12,   // zigzag, one to ten in order
+      speed: (H + r * 5) / (3.4 + Math.random() * 0.9),
+      sway: r * (0.25 + Math.random() * 0.25),
+      phase: Math.random() * 6.28,
+      age: 0
+    });
+  }
+  kick();
+}
+
+function frameLoop(now) {
+  var dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+  g2.clearRect(0, 0, W, H);
+
+  balloons = balloons.filter(function (b) {
+    b.age += dt;
+    b.y -= b.speed * dt;
+    b.x = b.x0 + Math.sin(b.phase + b.age * 2.2) * b.sway;
+    drawBalloon(b);
+    return b.y > -b.r * 4;
+  });
+
+  parts = parts.filter(function (p) {
+    p.age += dt;
+    if (p.age >= p.life) { return false; }
+    var fade = 1 - p.age / p.life;
+    if (p.kind === "ring") {
+      g2.globalAlpha = fade * 0.8;
+      g2.strokeStyle = p.color;
+      g2.lineWidth = 5 * fade + 1;
+      g2.beginPath();
+      g2.arc(p.x, p.y, 14 + (p.age / p.life) * 46, 0, Math.PI * 2);
+      g2.stroke();
+      return true;
+    }
+    p.vy += 900 * dt;
+    p.vx *= 1 - 1.2 * dt;
+    p.vy *= 1 - 0.6 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.vr * dt;
+    g2.globalAlpha = Math.min(1, fade * 2);
+    g2.fillStyle = p.color;
+    g2.save();
+    g2.translate(p.x, p.y);
+    g2.rotate(p.rot);
+    if (p.kind === "dot") {
+      g2.beginPath(); g2.arc(0, 0, p.size * 0.45, 0, Math.PI * 2); g2.fill();
+    } else {
+      g2.fillRect(-p.size / 2, -p.size * 0.3, p.size, p.size * 0.6);
+    }
+    g2.restore();
+    return p.y < H + 40;
+  });
+  g2.globalAlpha = 1;
+
+  if (parts.length || balloons.length) {
+    requestAnimationFrame(frameLoop);
+  } else {
+    running = false;
+    g2.clearRect(0, 0, W, H);
+  }
+}
+
+function drawBalloon(b) {
+  var r = b.r, x = b.x, y = b.y, ry = r * 1.2;
+  // string
+  g2.globalAlpha = 0.6;
+  g2.strokeStyle = "#ffffff";
+  g2.lineWidth = 1.5;
+  g2.beginPath();
+  g2.moveTo(x, y + ry + 4);
+  g2.quadraticCurveTo(x + Math.sin(b.age * 3 + b.phase) * r * 0.4, y + ry + r * 1.2, x, y + ry + r * 2.2);
+  g2.stroke();
+  g2.globalAlpha = 1;
+  // knot
+  g2.fillStyle = b.color;
+  g2.beginPath();
+  g2.moveTo(x, y + ry - 2);
+  g2.lineTo(x - r * 0.14, y + ry + 6);
+  g2.lineTo(x + r * 0.14, y + ry + 6);
+  g2.closePath();
+  g2.fill();
+  // body
+  g2.beginPath();
+  g2.ellipse(x, y, r, ry, 0, 0, Math.PI * 2);
+  g2.fill();
+  // shine
+  g2.fillStyle = "rgba(255, 255, 255, 0.38)";
+  g2.beginPath();
+  g2.ellipse(x - r * 0.38, y - ry * 0.42, r * 0.2, ry * 0.28, -0.5, 0, Math.PI * 2);
+  g2.fill();
+  // its number
+  g2.fillStyle = "rgba(255, 255, 255, 0.95)";
+  g2.font = "900 " + Math.round(r * 0.95) + "px ui-rounded, system-ui, sans-serif";
+  g2.textAlign = "center";
+  g2.textBaseline = "middle";
+  g2.fillText(String(b.n), x, y + r * 0.05);
+}
+
+function hitBalloon(x, y) {
+  for (var k = balloons.length - 1; k >= 0; k--) {
+    var b = balloons[k];
+    var dx = (x - b.x) / (b.r * 1.15), dy = (y - b.y) / (b.r * 1.35);
+    if (dx * dx + dy * dy <= 1) { return k; }
+  }
+  return -1;
+}
+
+/* =====================================================================
+   Counting
+   ===================================================================== */
+var count = 0;
+var lastStep = 0;
+var party = "off";               // "off" | "waiting" (ten is being said) | "on"
+var partyTimers = [];
+
+function show(n) {
+  var c = COLORS[n];
+  numeral.textContent = String(n);
+  numeral.style.color = c;
+  restartAnim(numeral, "pop");
+  word.textContent = WORDS[n];
+  stage.style.color = c;
+  hint.hidden = true;
+  var dot = dots[n - 1];
+  dot.classList.add("on");
+  restartAnim(dot, "new");
+  live.textContent = n === MAX ? "Ten! Hooray!" : WORDS[n];
+}
+
+function clearFrame() {
+  dots.forEach(function (d) { d.classList.remove("on", "new"); });
+}
+
+function buzz(pattern) {
+  try { if (navigator.vibrate) { navigator.vibrate(pattern); } } catch (e) {}
+}
+function buzzCount(n) {
+  var p = [];
+  for (var k = 0; k < n; k++) { p.push(28, 72); }
+  p.pop();
+  buzz(p);
+}
+
+function step(x, y) {
+  var a = ctx();
+  var now = performance.now();
+
+  if (party !== "off") {
+    if (party === "on") { partyTap(x, y); }
+    else { ripple(x, y, "#ffffff"); }
+    return;
+  }
+
+  if (now - lastStep < TAP_GAP_MS) {
+    ripple(x, y, count ? COLORS[count] : "#ffffff");
+    return;
+  }
+  lastStep = now;
+
+  if (count >= MAX) { clearFrame(); count = 0; }
+  count += 1;
+  show(count);
+  ripple(x, y, COLORS[count]);
+  if (a) { chime(count, a.currentTime + 0.005); }
+  var said = speakNumber(count);
+  buzzCount(count);
+  if (count === MAX) { startParty(said); }
+}
+
+function startParty(saidSeconds) {
+  party = "waiting";
+  var delay = Math.min(1.4, Math.max(0.4, saidSeconds + 0.08));
+  partyTimers.push(setTimeout(function () {
+    party = "on";
+    document.body.classList.add("party");
+    if (actx) { fanfare(actx.currentTime + 0.02); }
+    buzz([60, 50, 60, 50, 180]);
+    if (!REDUCED) {
+      confetti(W / 2, H * 0.36, 150, COLORS.slice(1), Math.max(W, H) * 0.9);
+      launchBalloons();
+    }
+  }, delay * 1000));
+  partyTimers.push(setTimeout(endParty, (delay + (REDUCED ? 2.4 : 5.2)) * 1000));
+}
+
+function partyTap(x, y) {
+  var k = hitBalloon(x, y);
+  if (k >= 0) {
+    var b = balloons.splice(k, 1)[0];
+    if (actx) { popSound(actx.currentTime + 0.005); }
+    confetti(b.x, b.y, 22, [b.color, "#ffffff"], 420);
+    buzz(25);
+  } else {
+    if (actx) { bloop(actx.currentTime + 0.005); }
+    confetti(x, y, 14, COLORS.slice(1), 380);
+  }
+}
+
+function endParty() {
+  partyTimers.forEach(clearTimeout);
+  partyTimers = [];
+  party = "off";
+  document.body.classList.remove("party");
+  lastStep = 0;
+}
+
+/* =====================================================================
+   Input: tap anywhere; Space, Enter, or arrow keys for grown-ups
+   ===================================================================== */
+stage.addEventListener("pointerdown", function (e) {
+  e.preventDefault();
+  step(e.clientX, e.clientY);
+});
+
+window.addEventListener("keydown", function (e) {
+  var k = e.key;
+  if (k === " " || k === "Spacebar" || k === "Enter" || k === "ArrowRight" || k === "ArrowUp") {
+    e.preventDefault();
+    if (e.repeat) { return; }
+    step(W / 2, H * 0.4);
+  }
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) {
+    stopClip();
+    try { if (synth) { synth.cancel(); } } catch (e) {}
+  }
+});
+
+/* Kill long-press menus so mashing never pops a save/select menu */
+window.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+loadRecordings();
+</script>
+</body>
+</html>
