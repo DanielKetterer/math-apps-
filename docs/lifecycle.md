@@ -30,4 +30,4 @@ Review separately for:
 Update the registry with status, app path, URL, and review date. The gallery lists only published apps. Where feasible, gather privacy-respecting evidence about usability and learning; a correct app is not automatically an effective intervention.
 
 ## Improve the graph
-If building or reviewing an app reveals a missing concept, unclear node, or questionable prerequisite, propose a change to `math-dag) separately. Do not silently rewrite the knowledge graph to fit one app.
+If building or reviewing an app reveals a missing concept, unclear node, or questionable prerequisite, propose a change to [math-dag](https://github.com/DanielKetterer/math-dag) separately. Do not silently rewrite the knowledge graph to fit one app.
