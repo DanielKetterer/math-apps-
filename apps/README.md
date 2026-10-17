@@ -4,7 +4,7 @@ This directory is reserved for approved projects.
 
 | App | Status |
 |---|---|
-| [count-to-ten](count-to-ten/) | review |
+| [count-to-ten](count-to-ten/) | approved |
 
 ## Directory convention
 
