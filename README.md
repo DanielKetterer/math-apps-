@@ -2,7 +2,7 @@
 
 A portfolio of small, standalone educational mathematics webapps, informed by the [math-dag knowledge map](https://github.com/DanielKetterer/math-dag).
 
-**Current state:** repository structure and project workflow are being established. The first app, [Count to Ten](apps/count-to-ten/), is built and in review. Nothing has been published to the catalogue yet.
+**Current state:** repository structure and project workflow are being established. The first app, [Count to Ten](apps/count-to-ten/), is built and published to the catalogue.
 
 ## Purpose
 
