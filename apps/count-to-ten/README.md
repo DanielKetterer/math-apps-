@@ -1,5 +1,5 @@
 # Count to Ten
-
+https://danielketterer.github.io/math-apps-/apps/count-to-ten/
 A tap-to-count toy for a toddler. Tap anywhere and the next number appears, one to ten, each in its own color. At ten there is a celebration (fanfare, confetti, ten numbered balloons she can pop), and the next tap starts again at one.
 
 Built for Alexandra, 17 months old in October 2026, to be played **with** a grown-up.
